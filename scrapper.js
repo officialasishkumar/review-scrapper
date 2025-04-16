@@ -1,12 +1,3 @@
-/**
- * scraper.js
- * 
- * This unified script reads input from "input.json" (which must include fields "url", "start_date", and "end_date"),
- * then determines whether the URL belongs to G2 or Capterra and calls the appropriate scrapper.
- * 
- * Usage: node scraper.js
- */
-
 const cheerio = require("cheerio");
 const { CrawlingAPI } = require("crawlbase");
 const fs = require("fs");
@@ -15,16 +6,12 @@ require("dotenv").config();
 
 const api = new CrawlingAPI({ token: process.env.TOKEN });
 
-/**
- * Saves the final scraped data as JSON in the output folder.
- */
 function saveToJsonFile(data) {
     const outputDir = path.join(__dirname, 'output');
     if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir);
     }
 
-    // For Capterra pages, the product name might include a " Reviews" suffix.
     let cleanProductName = data.productName.replace(/ Reviews$/i, '');
     const sanitizedProductName = cleanProductName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
@@ -36,11 +23,6 @@ function saveToJsonFile(data) {
     return { filePath, filename };
 }
 
-/* ======================= G2 SCRAPER FUNCTIONS ======================= */
-
-/**
- * Parses G2 HTML to extract product and review data.
- */
 function parsedDataFromHTML_G2(html) {
     try {
         const $ = cheerio.load(html);
@@ -85,9 +67,6 @@ function parsedDataFromHTML_G2(html) {
     }
 }
 
-/**
- * Generates the proper URL for the given page number.
- */
 function generatePageUrl(baseUrl, pageNum) {
     if (pageNum === 1) {
         return baseUrl;
@@ -99,9 +78,6 @@ function generatePageUrl(baseUrl, pageNum) {
     }
 }
 
-/**
- * Iteratively scrapes all G2 pages.
- */
 async function scrapeAllPages_G2(baseUrl) {
     let currentPage = 1;
     let hasNextPage = true;
@@ -115,11 +91,23 @@ async function scrapeAllPages_G2(baseUrl) {
         console.log(`Scraping page ${currentPage}: ${currentUrl}`);
 
         try {
-            const response = await api.get(currentUrl);
-            const parsedResult = parsedDataFromHTML_G2(response.body);
+            let parsedResult, response;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                response = await api.get(currentUrl);
+                parsedResult = parsedDataFromHTML_G2(response.body);
+
+                if (parsedResult.error) {
+                    console.error(`Error parsing page ${currentPage}:`, parsedResult.error);
+                    break;
+                }
+                if (parsedResult.productData.allReviews.length > 0) break;
+
+                console.warn(`Attempt ${attempt} for page ${currentPage} returned 0 reviews—retrying...`);
+                await new Promise(r => setTimeout(r, 5000));
+            }
 
             if (parsedResult.error) {
-                console.error(`Error parsing page ${currentPage}:`, parsedResult.error);
+                console.error(`Failed parsing after retries on page ${currentPage}.`);
                 break;
             }
 
@@ -137,7 +125,6 @@ async function scrapeAllPages_G2(baseUrl) {
             hasNextPage = parsedResult.hasNextPage;
             currentPage++;
 
-            // Wait 30 seconds to mimic the delay between page requests.
             await new Promise(resolve => setTimeout(resolve, 25000));
         } catch (error) {
             console.error(`Failed to scrape page ${currentPage}:`, error);
@@ -152,10 +139,6 @@ async function scrapeAllPages_G2(baseUrl) {
     };
 }
 
-/**
- * Filters reviews by start and end date (inclusive).
- * Assumes that G2 review dates are in a format parseable by new Date().
- */
 function filterReviewsByDate(reviews, startDateStr, endDateStr) {
     const startDate = new Date(startDateStr);
     const endDate = new Date(endDateStr);
@@ -166,11 +149,6 @@ function filterReviewsByDate(reviews, startDateStr, endDateStr) {
     });
 }
 
-/* ======================= CAPTERRA SCRAPER FUNCTIONS ======================= */
-
-/**
- * Parses Capterra HTML to extract product and review data.
- */
 function parsedDataFromHTML_Capterra(html) {
     try {
         const $ = cheerio.load(html);
@@ -215,9 +193,6 @@ function parsedDataFromHTML_Capterra(html) {
     }
 }
 
-/**
- * Converts a relative time string (like "2 months ago") to a Date object.
- */
 function calculateDateFromRelative(relativeTimeStr) {
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
@@ -242,9 +217,6 @@ function calculateDateFromRelative(relativeTimeStr) {
     }
 }
 
-/**
- * Checks if the review's date (given as a relative time string) falls within the specified range.
- */
 function isReviewInDateRange(reviewDateStr, startDate, endDate) {
     const reviewDate = calculateDateFromRelative(reviewDateStr);
     const start = new Date(startDate);
@@ -252,9 +224,6 @@ function isReviewInDateRange(reviewDateStr, startDate, endDate) {
     return reviewDate >= start && reviewDate <= end;
 }
 
-/**
- * Scrapes and filters Capterra reviews.
- */
 async function scrapeAndFilterReviews_Capterra(baseUrl, startDate, endDate) {
     let allReviews = [];
     let filteredReviews = [];
@@ -264,13 +233,20 @@ async function scrapeAndFilterReviews_Capterra(baseUrl, startDate, endDate) {
     console.log(`Filtering reviews between ${startDate} and ${endDate}`);
 
     try {
-        const response = await api.get(baseUrl);
-        console.log(response.body);
-        const parsedResult = parsedDataFromHTML_Capterra(response.body);
 
-        if (parsedResult.error) {
-            console.error("Error parsing page:", parsedResult.error);
-            return null;
+        let parsedResult, response;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            response = await api.get(baseUrl);
+            parsedResult = parsedDataFromHTML_Capterra(response.body);
+
+            if (parsedResult.error) {
+                console.error("Error parsing page:", parsedResult.error);
+                return null;
+            }
+            if (parsedResult.productData.allReviews.length > 0) break;
+
+            console.warn(`Attempt ${attempt} for Capterra returned 0 reviews—retrying...`);
+            await new Promise(r => setTimeout(r, 5000));
         }
 
         let cleanProductName = parsedResult.productData.productName.replace(/ Reviews$/i, '');
@@ -299,8 +275,6 @@ async function scrapeAndFilterReviews_Capterra(baseUrl, startDate, endDate) {
     };
 }
 
-/* ======================= MAIN FUNCTION ======================= */
-
 async function main() {
     try {
         const inputFilePath = path.join(__dirname, 'input.json');
@@ -317,13 +291,12 @@ async function main() {
         }
 
         let result;
-        // Choose the scraper based on the URL
+
         if (url.toLowerCase().includes('capterra')) {
             result = await scrapeAndFilterReviews_Capterra(url, start_date, end_date);
         } else if (url.toLowerCase().includes('g2')) {
             result = await scrapeAllPages_G2(url);
-            // For G2 the review dates are expected to be in a parseable date format,
-            // so we filter the results further based on the provided date range.
+
             result.allReviews = filterReviewsByDate(result.allReviews, start_date, end_date);
             result.totalScrapedReviews = result.allReviews.length;
         } else {
@@ -335,8 +308,6 @@ async function main() {
             console.error("Failed to scrape data");
             process.exit(1);
         }
-
-        
 
         const fileInfo = saveToJsonFile(result);
         console.log("Scraping complete.");
