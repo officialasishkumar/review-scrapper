@@ -55,25 +55,12 @@ This Node.js project scrapes reviews from **G2** and **Capterra**, filters them 
    - `capterra.com`
 
 ---
-
-## 🧾 File Structure
-
-```
-├── output/              # Output folder for scraped JSON files
-├── input.json           # Input file with target URL and date range
-├── .env                 # Your Crawlbase API token
-├── index.js             # Main scraping logic
-├── package.json
-```
-
----
-
 ## 🚀 Running the Scraper
 
 Once you've set everything up:
 
 ```bash
-node index.js
+node scrapper.js
 ```
 
 📂 Your scraped review file will be saved in the `output/` directory, named after the product and timestamped.
@@ -85,6 +72,6 @@ node index.js
 - Make sure the input URL is correct and publicly accessible.
 - The scraper respects a delay between requests to avoid bans.
 - G2 reviews are paginated and collected across multiple pages.
-- Capterra pulls all visible reviews from the main page only (pagination TBD based on structure).
+- Capterra pulls all visible reviews from the main page only.
 
 ---
