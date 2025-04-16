@@ -78,16 +78,12 @@ function generatePageUrl(baseUrl, pageNum) {
     }
 }
 
-/**
- * Helper function to parse G2 review dates.
- * Converts a date string in the format "Jan 24, 2025" to a valid Date object.
- */
 function parseG2Date(dateStr) {
     dateStr = dateStr.trim();
     const parts = dateStr.split(' ');
-    // Expecting [Month, Day, Year] where Day might include a trailing comma.
+
     if (parts.length < 3) {
-        // Fallback to the default Date constructor for unexpected formats.
+
         return new Date(dateStr);
     }
     const monthStr = parts[0];
@@ -116,10 +112,6 @@ function parseG2Date(dateStr) {
     return new Date(year, month, day);
 }
 
-/**
- * Updated filtering function for G2 reviews.
- * Uses the input start_date and end_date (in "YYYY-MM-DD" format) to filter reviews.
- */
 function filterReviewsByDate(reviews, startDateStr, endDateStr) {
     const startDate = new Date(startDateStr);
     const endDate = new Date(endDateStr);
@@ -144,7 +136,7 @@ async function scrapeAllPages_G2(baseUrl) {
 
         try {
             let parsedResult, response;
-            for (let attempt = 1; attempt <= 3; attempt++) {
+            for (let attempt = 1; attempt <= 5; attempt++) {
                 response = await api.get(currentUrl);
                 parsedResult = parsedDataFromHTML_G2(response.body);
 
@@ -237,25 +229,30 @@ function parsedDataFromHTML_Capterra(html) {
 
 function calculateDateFromRelative(relativeTimeStr) {
     const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth();
+    const lowerStr = relativeTimeStr.toLowerCase();
 
-    if (relativeTimeStr.includes('years ago') || relativeTimeStr.includes('year ago')) {
+    if (lowerStr.includes('year')) {
+
         const years = parseInt(relativeTimeStr);
-        return new Date(currentYear - years, 0, 1);
-    } else if (relativeTimeStr.includes('months ago') || relativeTimeStr.includes('month ago')) {
+        return new Date(currentDate.getFullYear() - years, currentDate.getMonth(), currentDate.getDate());
+    } else if (lowerStr.includes('month')) {
+
         const months = parseInt(relativeTimeStr);
-        let targetYear = currentYear;
-        let targetMonth = currentMonth - months;
-        while (targetMonth < 0) {
-            targetYear--;
-            targetMonth += 12;
+        let newMonth = currentDate.getMonth() - months;
+        let newYear = currentDate.getFullYear();
+        while (newMonth < 0) {
+            newMonth += 12;
+            newYear--;
         }
-        return new Date(targetYear, targetMonth, 1);
-    } else if (relativeTimeStr.includes('days ago') || relativeTimeStr.includes('day ago')) {
-        return new Date(currentYear, currentMonth, 1);
+        return new Date(newYear, newMonth, currentDate.getDate());
+    } else if (lowerStr.includes('day')) {
+
+        const days = parseInt(relativeTimeStr);
+        const resultDate = new Date(currentDate);
+        resultDate.setDate(resultDate.getDate() - days);
+        return resultDate;
     } else {
-        return currentDate;
+        return new Date(relativeTimeStr);
     }
 }
 
@@ -277,7 +274,7 @@ async function scrapeAndFilterReviews_Capterra(baseUrl, startDate, endDate) {
     try {
 
         let parsedResult, response;
-        for (let attempt = 1; attempt <= 3; attempt++) {
+        for (let attempt = 1; attempt <= 5; attempt++) {
             response = await api.get(baseUrl);
             parsedResult = parsedDataFromHTML_Capterra(response.body);
 
@@ -339,7 +336,6 @@ async function main() {
         } else if (url.toLowerCase().includes('g2')) {
             result = await scrapeAllPages_G2(url);
 
-            // Filter only the G2 reviews based on the provided date range.
             result.allReviews = filterReviewsByDate(result.allReviews, start_date, end_date);
             result.totalScrapedReviews = result.allReviews.length;
         } else {
