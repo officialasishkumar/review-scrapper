@@ -1,4 +1,3 @@
-Sure! Here's a clear and structured `README.md` for your scraping project:
 
 ---
 
