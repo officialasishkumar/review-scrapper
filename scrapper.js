@@ -78,6 +78,58 @@ function generatePageUrl(baseUrl, pageNum) {
     }
 }
 
+/**
+ * Helper function to parse G2 review dates.
+ * Converts a date string in the format "Jan 24, 2025" to a valid Date object.
+ */
+function parseG2Date(dateStr) {
+    dateStr = dateStr.trim();
+    const parts = dateStr.split(' ');
+    // Expecting [Month, Day, Year] where Day might include a trailing comma.
+    if (parts.length < 3) {
+        // Fallback to the default Date constructor for unexpected formats.
+        return new Date(dateStr);
+    }
+    const monthStr = parts[0];
+    const day = parseInt(parts[1].replace(',', ''), 10);
+    const year = parseInt(parts[2], 10);
+
+    const monthMap = {
+        Jan: 0,
+        Feb: 1,
+        Mar: 2,
+        Apr: 3,
+        May: 4,
+        Jun: 5,
+        Jul: 6,
+        Aug: 7,
+        Sep: 8,
+        Oct: 9,
+        Nov: 10,
+        Dec: 11,
+    };
+
+    const month = monthMap[monthStr];
+    if (month === undefined || isNaN(day) || isNaN(year)) {
+        return new Date(dateStr);
+    }
+    return new Date(year, month, day);
+}
+
+/**
+ * Updated filtering function for G2 reviews.
+ * Uses the input start_date and end_date (in "YYYY-MM-DD" format) to filter reviews.
+ */
+function filterReviewsByDate(reviews, startDateStr, endDateStr) {
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    return reviews.filter(review => {
+        const reviewDateObj = parseG2Date(review.reviewDate);
+        if (isNaN(reviewDateObj)) return false;
+        return reviewDateObj >= startDate && reviewDateObj <= endDate;
+    });
+}
+
 async function scrapeAllPages_G2(baseUrl) {
     let currentPage = 1;
     let hasNextPage = true;
@@ -137,16 +189,6 @@ async function scrapeAllPages_G2(baseUrl) {
         allReviews,
         totalScrapedReviews: allReviews.length
     };
-}
-
-function filterReviewsByDate(reviews, startDateStr, endDateStr) {
-    const startDate = new Date(startDateStr);
-    const endDate = new Date(endDateStr);
-    return reviews.filter(review => {
-        const reviewDateObj = new Date(review.reviewDate);
-        if (isNaN(reviewDateObj)) return false;
-        return reviewDateObj >= startDate && reviewDateObj <= endDate;
-    });
 }
 
 function parsedDataFromHTML_Capterra(html) {
@@ -297,6 +339,7 @@ async function main() {
         } else if (url.toLowerCase().includes('g2')) {
             result = await scrapeAllPages_G2(url);
 
+            // Filter only the G2 reviews based on the provided date range.
             result.allReviews = filterReviewsByDate(result.allReviews, start_date, end_date);
             result.totalScrapedReviews = result.allReviews.length;
         } else {
